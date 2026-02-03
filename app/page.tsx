@@ -115,7 +115,7 @@ export default function Home() {
   };
 
   return (
-    <div className="h-screen bg-cursor-bg flex flex-col overflow-hidden">
+    <div className="min-h-screen bg-cursor-bg flex flex-col lg:h-screen lg:overflow-hidden">
       {/* Header */}
       <header className="flex-shrink-0 border-b border-cursor-border bg-cursor-surface/50 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -141,10 +141,10 @@ export default function Home() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 min-h-0 max-w-7xl mx-auto w-full px-6 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
+      <main className="flex-1 lg:min-h-0 max-w-7xl mx-auto w-full px-6 py-6 overflow-y-auto lg:overflow-hidden">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:h-full">
           {/* Left Panel - Upload */}
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-4 min-h-[400px] lg:min-h-0">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-medium text-cursor-terminal font-mono uppercase tracking-wider">
                 Source
@@ -259,7 +259,7 @@ export default function Home() {
           </div>
 
           {/* Right Panel - Editor */}
-          <div className="flex flex-col gap-4 min-h-0">
+          <div className="flex flex-col gap-4 min-h-[400px] lg:min-h-0">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-medium text-cursor-terminal font-mono uppercase tracking-wider">
                 Output
@@ -362,7 +362,16 @@ export default function Home() {
       <footer className="flex-shrink-0 border-t border-cursor-border py-4">
         <div className="max-w-5xl mx-auto px-6 text-center">
           <div className="text-sm text-cursor-terminal font-mono">
-            Built with Z.AI GLM-OCR
+            Built with{" "}
+            <a
+              href="https://z.ai/model-api"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:underline"
+            >
+              Z.AI
+            </a>{" "}
+            GLM-OCR
           </div>
           <div className="text-xs text-cursor-muted mt-1">
             Not affiliated with Z.AI
