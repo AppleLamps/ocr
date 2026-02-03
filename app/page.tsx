@@ -24,7 +24,6 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const lineNumbersRef = useRef<HTMLDivElement>(null);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const selectedFile = acceptedFiles[0];
@@ -105,14 +104,8 @@ export default function Home() {
     setError(null);
   };
 
-  const lineCount = text ? text.split("\n").length : 1;
-  const lines = Array.from({ length: lineCount }, (_, i) => i + 1);
-
-  const syncScroll = () => {
-    if (textareaRef.current && lineNumbersRef.current) {
-      lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop;
-    }
-  };
+  const charCount = text.length;
+  const wordCount = text ? text.trim().split(/\s+/).filter(Boolean).length : 0;
 
   return (
     <div className="min-h-screen bg-cursor-bg flex flex-col lg:h-screen lg:overflow-hidden">
@@ -120,7 +113,13 @@ export default function Home() {
       <header className="flex-shrink-0 border-b border-cursor-border bg-cursor-surface/50 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src="/logo.svg" alt="Logo" className="w-8 h-8" />
+            <a
+              href="https://z.ai/model-api"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <img src="/logo.svg" alt="Logo" className="w-8 h-8" />
+            </a>
             <h1 className="text-lg font-semibold text-cursor-text">
               OCR Studio
             </h1>
@@ -310,31 +309,17 @@ export default function Home() {
               </div>
 
               {/* Editor Content */}
-              <div className="flex-1 flex overflow-hidden min-h-0">
-                {/* Line Numbers */}
-                <div
-                  ref={lineNumbersRef}
-                  className="line-numbers py-4 px-3 bg-cursor-bg/30 border-r border-cursor-border overflow-y-auto select-none text-right min-w-[3rem]"
-                >
-                  {lines.map((num) => (
-                    <div key={num} className="h-[1.6em]">
-                      {num}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Textarea */}
+              <div className="flex-1 overflow-hidden min-h-0">
                 <textarea
                   ref={textareaRef}
                   value={text}
                   onChange={(e) => setText(e.target.value)}
-                  onScroll={syncScroll}
                   placeholder={
                     isProcessing
                       ? "Extracting text..."
                       : "Extracted text will appear here..."
                   }
-                  className="editor-textarea flex-1 bg-transparent text-cursor-text p-4 w-full overflow-y-auto placeholder:text-cursor-muted/50"
+                  className="editor-textarea bg-transparent text-cursor-text p-4 w-full h-full overflow-y-auto placeholder:text-cursor-muted/50"
                   spellCheck={false}
                 />
               </div>
@@ -343,7 +328,7 @@ export default function Home() {
               <div className="bg-cursor-bg/50 border-t border-cursor-border px-4 py-2 flex items-center justify-between text-xs text-cursor-terminal font-mono">
                 <span>Markdown</span>
                 <span>
-                  {text ? `${lineCount} lines · ${text.length} chars` : "Ready"}
+                  {text ? `${wordCount} words · ${charCount} chars` : "Ready"}
                 </span>
               </div>
             </div>
