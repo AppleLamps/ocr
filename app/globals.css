@@ -117,6 +117,12 @@ body {
     box-shadow: 0 0 20px rgba(59, 130, 246, 0.15);
 }
 
+/* Neon link */
+.neon-link {
+    color: #39ff14;
+    text-shadow: 0 0 10px #39ff14;
+}
+
 /* Selection color */
 ::selection {
     background: rgba(132, 204, 22, 0.3);

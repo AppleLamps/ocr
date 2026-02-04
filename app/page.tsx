@@ -12,8 +12,6 @@ import {
   X,
   File,
   Image as ImageIcon,
-  Sparkles,
-  Terminal,
 } from "lucide-react";
 
 export default function Home() {
@@ -24,6 +22,35 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const processOCR = useCallback(async (fileToProcess: File | null) => {
+    if (!fileToProcess) return;
+
+    setIsProcessing(true);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", fileToProcess);
+
+      const response = await fetch("/api/ocr", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "OCR processing failed");
+      }
+
+      setText(data.text || "");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setIsProcessing(false);
+    }
+  }, []);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const selectedFile = acceptedFiles[0];
@@ -52,34 +79,9 @@ export default function Home() {
     maxSize: 50 * 1024 * 1024,
   });
 
-  const processOCR = async () => {
-    if (!file) return;
-
-    setIsProcessing(true);
-    setError(null);
-
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const response = await fetch("/api/ocr", {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "OCR processing failed");
-      }
-
-      setText(data.text || "");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+  useEffect(() => {
+    void processOCR(file);
+  }, [file, processOCR]);
 
   const copyToClipboard = async () => {
     await navigator.clipboard.writeText(text);
@@ -128,8 +130,7 @@ export default function Home() {
             href="https://x.com/lamps_apple"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm font-mono hover:underline"
-            style={{ color: "#39ff14", textShadow: "0 0 10px #39ff14" }}
+            className="text-sm font-mono hover:underline neon-link"
           >
             built by @lamps_apple
           </a>
@@ -235,24 +236,12 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* Extract Button */}
-                <button
-                  onClick={processOCR}
-                  disabled={isProcessing}
-                  className="btn-primary w-full py-3 px-4 bg-lime-500 hover:bg-lime-400 disabled:bg-lime-500/50 text-black font-medium rounded-xl flex items-center justify-center gap-2 transition-all disabled:cursor-not-allowed"
-                >
-                  {isProcessing ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-5 h-5" />
-                      Extract Text
-                    </>
-                  )}
-                </button>
+                {isProcessing && (
+                  <div className="w-full py-3 px-4 bg-lime-500/10 border border-lime-500/40 text-lime-300 font-medium rounded-xl flex items-center justify-center gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Processing...
+                  </div>
+                )}
               </div>
             )}
           </div>
