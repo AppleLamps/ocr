@@ -40,13 +40,13 @@ export default function Home() {
 
       const contentType = response.headers.get("content-type") || "";
       const isJson = contentType.includes("application/json");
-      const data = isJson
+      const data: any = isJson
         ? await response.json()
         : { error: `Non-JSON response: ${await response.text()}` };
 
       if (!response.ok) {
         const statusHint = ` (HTTP ${response.status})`;
-        throw new Error(((data as { error?: string }).error || "OCR processing failed") + statusHint);
+        throw new Error((data.error || "OCR processing failed") + statusHint);
       }
 
       setText(data.text || "");

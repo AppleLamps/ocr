@@ -70,15 +70,8 @@ export async function POST(request: NextRequest) {
       let errorMessage: string | undefined
       if (errorText) {
         try {
-          const parsed: unknown = JSON.parse(errorText)
-          if (
-            parsed &&
-            typeof parsed === 'object' &&
-            'message' in parsed &&
-            typeof (parsed as { message?: unknown }).message === 'string'
-          ) {
-            errorMessage = (parsed as { message: string }).message
-          }
+          const parsed = JSON.parse(errorText) as { message?: unknown }
+          if (typeof parsed?.message === 'string') errorMessage = parsed.message
         } catch {
           errorMessage = undefined
         }
