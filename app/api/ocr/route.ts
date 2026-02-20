@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+// Node runtime avoids Edge request body limits (common cause of 413 on PDF uploads) and supports Buffer usage reliably.
 export const runtime = 'nodejs'
 // Limit echoed upstream error bodies to avoid oversized responses while keeping useful context.
 const MAX_ERROR_TEXT_LENGTH = 2000
