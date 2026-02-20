@@ -45,8 +45,8 @@ export default function Home() {
         : { error: `Non-JSON response: ${await response.text()}` };
 
       if (!response.ok) {
-        const statusHint = response.status ? ` (HTTP ${response.status})` : "";
-        throw new Error((data?.error || "OCR processing failed") + statusHint);
+        const statusHint = ` (HTTP ${response.status})`;
+        throw new Error(((data as { error?: string }).error || "OCR processing failed") + statusHint);
       }
 
       setText(data.text || "");
