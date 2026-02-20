@@ -68,10 +68,12 @@ export async function POST(request: NextRequest) {
     if (!ocrResponse.ok) {
       const errorText = await ocrResponse.text()
       let errorData: { message?: string } | undefined
-      try {
-        errorData = JSON.parse(errorText || '{}') as { message?: string }
-      } catch {
-        errorData = undefined
+      if (errorText) {
+        try {
+          errorData = JSON.parse(errorText) as { message?: string }
+        } catch {
+          errorData = undefined
+        }
       }
       console.error('OCR API Error:', errorData || errorText)
       return NextResponse.json(
