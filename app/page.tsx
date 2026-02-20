@@ -14,6 +14,8 @@ import {
   Image as ImageIcon,
 } from "lucide-react";
 
+const MAX_ERROR_BODY_LENGTH = 500;
+
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -42,7 +44,7 @@ export default function Home() {
       const contentType = response.headers.get("content-type") || "";
       const isJson = contentType.includes("application/json");
       const bodyText = await response.text();
-      const safeBodyText = bodyText.slice(0, 500);
+      const safeBodyText = bodyText.slice(0, MAX_ERROR_BODY_LENGTH);
       const data: OcrApiResponse = isJson
         ? (() => {
             try {

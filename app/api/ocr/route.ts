@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 export const runtime = 'nodejs'
+// Limit echoed upstream error bodies to avoid oversized responses while keeping useful context.
 const MAX_ERROR_TEXT_LENGTH = 2000
 
 function hasMessage(v: unknown): v is { message: string } {
