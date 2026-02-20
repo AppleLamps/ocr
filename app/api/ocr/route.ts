@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 export const runtime = 'nodejs'
+const MAX_ERROR_TEXT_LENGTH = 2000
 
 function hasMessage(v: unknown): v is { message: string } {
   return (
@@ -85,7 +86,7 @@ export async function POST(request: NextRequest) {
           errorMessage = undefined
         }
       }
-      const safeErrorText = errorText ? errorText.slice(0, 2000) : ''
+      const safeErrorText = errorText ? errorText.slice(0, MAX_ERROR_TEXT_LENGTH) : ''
       console.error('OCR API Error:', errorMessage || safeErrorText)
       return NextResponse.json(
         { error: errorMessage || safeErrorText || 'OCR processing failed' },
