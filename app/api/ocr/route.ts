@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
   try {
@@ -66,10 +66,16 @@ export async function POST(request: NextRequest) {
     })
 
     if (!ocrResponse.ok) {
-      const errorData = await ocrResponse.json().catch(() => ({}))
-      console.error('OCR API Error:', errorData)
+      const errorText = await ocrResponse.text()
+      let errorData: { message?: string } | undefined
+      try {
+        errorData = JSON.parse(errorText || '{}') as { message?: string }
+      } catch {
+        errorData = undefined
+      }
+      console.error('OCR API Error:', errorData || errorText)
       return NextResponse.json(
-        { error: errorData.message || 'OCR processing failed' },
+        { error: errorData?.message || errorText || 'OCR processing failed' },
         { status: ocrResponse.status }
       )
     }
