@@ -7,8 +7,8 @@ const MAX_ERROR_TEXT_LENGTH = 2000
 
 function hasMessage(v: unknown): v is { message: string } {
   return (
-    !!v &&
     typeof v === 'object' &&
+    v !== null &&
     'message' in v &&
     typeof (v as { message?: unknown }).message === 'string'
   )

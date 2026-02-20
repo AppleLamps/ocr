@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 const MAX_ERROR_BODY_LENGTH = 500;
+type OcrApiResponse = { text?: string; error?: string };
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
@@ -32,7 +33,6 @@ export default function Home() {
     setError(null);
 
     try {
-      type OcrApiResponse = { text?: string; error?: string };
       const formData = new FormData();
       formData.append("file", fileToProcess);
 
