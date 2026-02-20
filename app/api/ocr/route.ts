@@ -67,17 +67,25 @@ export async function POST(request: NextRequest) {
 
     if (!ocrResponse.ok) {
       const errorText = await ocrResponse.text()
-      let errorData: { message?: string } | undefined
+      let errorMessage: string | undefined
       if (errorText) {
         try {
-          errorData = JSON.parse(errorText) as { message?: string }
+          const parsed: unknown = JSON.parse(errorText)
+          if (
+            parsed &&
+            typeof parsed === 'object' &&
+            'message' in parsed &&
+            typeof (parsed as { message?: unknown }).message === 'string'
+          ) {
+            errorMessage = (parsed as { message: string }).message
+          }
         } catch {
-          errorData = undefined
+          errorMessage = undefined
         }
       }
-      console.error('OCR API Error:', errorData || errorText)
+      console.error('OCR API Error:', errorMessage || errorText)
       return NextResponse.json(
-        { error: errorData?.message || errorText || 'OCR processing failed' },
+        { error: errorMessage || errorText || 'OCR processing failed' },
         { status: ocrResponse.status }
       )
     }

@@ -39,7 +39,8 @@ export default function Home() {
       });
 
       const contentType = response.headers.get("content-type") || "";
-      const data = contentType.includes("application/json")
+      const isJson = contentType.includes("application/json");
+      const data = isJson
         ? await response.json()
         : { error: `Non-JSON response: ${await response.text()}` };
 
