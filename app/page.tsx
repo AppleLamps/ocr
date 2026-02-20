@@ -30,6 +30,7 @@ export default function Home() {
     setError(null);
 
     try {
+      type OcrApiResponse = { text?: string; error?: string };
       const formData = new FormData();
       formData.append("file", fileToProcess);
 
@@ -40,7 +41,7 @@ export default function Home() {
 
       const contentType = response.headers.get("content-type") || "";
       const isJson = contentType.includes("application/json");
-      const data: any = isJson
+      const data: OcrApiResponse = isJson
         ? await response.json()
         : { error: `Non-JSON response: ${await response.text()}` };
 

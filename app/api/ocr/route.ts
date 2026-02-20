@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const runtime = 'nodejs'
 
+function hasMessage(v: unknown): v is { message: string } {
+  return (
+    !!v &&
+    typeof v === 'object' &&
+    'message' in v &&
+    typeof (v as { message?: unknown }).message === 'string'
+  )
+}
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
@@ -70,8 +79,8 @@ export async function POST(request: NextRequest) {
       let errorMessage: string | undefined
       if (errorText) {
         try {
-          const parsed = JSON.parse(errorText) as { message?: unknown }
-          if (typeof parsed?.message === 'string') errorMessage = parsed.message
+          const parsed: unknown = JSON.parse(errorText)
+          if (hasMessage(parsed)) errorMessage = parsed.message
         } catch {
           errorMessage = undefined
         }
