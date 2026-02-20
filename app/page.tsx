@@ -14,6 +14,9 @@ import {
   Image as ImageIcon,
 } from "lucide-react";
 
+const MAX_ERROR_BODY_LENGTH = 500;
+type OcrApiResponse = { text?: string; error?: string };
+
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -38,10 +41,27 @@ export default function Home() {
         body: formData,
       });
 
-      const data = await response.json();
+      const contentType = response.headers.get("content-type") || "";
+      const isJson = contentType.includes("application/json");
+      const bodyText = await response.text();
+      const nonJsonError =
+        bodyText.length > MAX_ERROR_BODY_LENGTH
+          ? `Non-JSON response: ${bodyText.slice(0, MAX_ERROR_BODY_LENGTH)}…`
+          : `Non-JSON response: ${bodyText}`;
+      let data: OcrApiResponse;
+      if (isJson) {
+        try {
+          data = JSON.parse(bodyText) as OcrApiResponse;
+        } catch {
+          data = { error: nonJsonError };
+        }
+      } else {
+        data = { error: nonJsonError };
+      }
 
       if (!response.ok) {
-        throw new Error(data.error || "OCR processing failed");
+        const statusHint = ` (HTTP ${response.status})`;
+        throw new Error((data.error || "OCR processing failed") + statusHint);
       }
 
       setText(data.text || "");

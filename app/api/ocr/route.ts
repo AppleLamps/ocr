@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-export const runtime = 'edge'
+// Node runtime avoids Edge request body limits (common cause of 413 on PDF uploads) and supports Buffer usage reliably.
+export const runtime = 'nodejs'
+// Limit echoed upstream error bodies to avoid oversized responses while keeping useful context.
+const MAX_ERROR_TEXT_LENGTH = 2000
+
+function hasMessage(v: unknown): v is { message: string } {
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    'message' in v &&
+    typeof (v as { message?: unknown }).message === 'string'
+  )
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -66,10 +78,24 @@ export async function POST(request: NextRequest) {
     })
 
     if (!ocrResponse.ok) {
-      const errorData = await ocrResponse.json().catch(() => ({}))
-      console.error('OCR API Error:', errorData)
+      const errorText = await ocrResponse.text()
+      let errorMessage: string | undefined
+      if (errorText) {
+        try {
+          const parsed: unknown = JSON.parse(errorText)
+          if (hasMessage(parsed)) errorMessage = parsed.message
+        } catch {
+          errorMessage = undefined
+        }
+      }
+      const safeErrorText = !errorText
+        ? ''
+        : errorText.length > MAX_ERROR_TEXT_LENGTH
+          ? `${errorText.slice(0, MAX_ERROR_TEXT_LENGTH)}…`
+          : errorText
+      console.error('OCR API Error:', errorMessage || safeErrorText)
       return NextResponse.json(
-        { error: errorData.message || 'OCR processing failed' },
+        { error: errorMessage || safeErrorText || 'OCR processing failed' },
         { status: ocrResponse.status }
       )
     }
