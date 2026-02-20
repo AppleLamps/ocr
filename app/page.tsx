@@ -41,9 +41,16 @@ export default function Home() {
 
       const contentType = response.headers.get("content-type") || "";
       const isJson = contentType.includes("application/json");
+      const bodyText = await response.text();
       const data: OcrApiResponse = isJson
-        ? await response.json()
-        : { error: `Non-JSON response: ${await response.text()}` };
+        ? (() => {
+            try {
+              return JSON.parse(bodyText) as OcrApiResponse;
+            } catch {
+              return { error: `Non-JSON response: ${bodyText}` };
+            }
+          })()
+        : { error: `Non-JSON response: ${bodyText}` };
 
       if (!response.ok) {
         const statusHint = ` (HTTP ${response.status})`;

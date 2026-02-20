@@ -85,9 +85,10 @@ export async function POST(request: NextRequest) {
           errorMessage = undefined
         }
       }
-      console.error('OCR API Error:', errorMessage || errorText)
+      const safeErrorText = errorText ? errorText.slice(0, 2000) : ''
+      console.error('OCR API Error:', errorMessage || safeErrorText)
       return NextResponse.json(
-        { error: errorMessage || errorText || 'OCR processing failed' },
+        { error: errorMessage || safeErrorText || 'OCR processing failed' },
         { status: ocrResponse.status }
       )
     }
