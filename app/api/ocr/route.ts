@@ -14,6 +14,26 @@ function hasMessage(v: unknown): v is { message: string } {
   )
 }
 
+const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024
+const MAX_PDF_SIZE_BYTES = 50 * 1024 * 1024
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  const chunkSize = 0x2000
+  let binary = ''
+
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const subArray = bytes.subarray(i, i + chunkSize)
+    let chunk = ''
+    for (let j = 0; j < subArray.length; j += 1) {
+      chunk += String.fromCharCode(subArray[j])
+    }
+    binary += chunk
+  }
+
+  return btoa(binary)
+}
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
@@ -26,18 +46,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check file size (max 10MB for images, 50MB for PDFs)
-    const maxSize = file.type === 'application/pdf' ? 50 * 1024 * 1024 : 10 * 1024 * 1024
+    // Mirror GLM-OCR documented limits.
+    const maxSize = file.type === 'application/pdf' ? MAX_PDF_SIZE_BYTES : MAX_IMAGE_SIZE_BYTES
     if (file.size > maxSize) {
       return NextResponse.json(
-        { error: `File too large. Maximum size is ${file.type === 'application/pdf' ? '50MB' : '10MB'}` },
+        {
+          error: `File too large. Maximum size is ${file.type === 'application/pdf' ? '50MB' : '10MB'}`,
+          code: 'FILE_TOO_LARGE',
+          limits: {
+            imageMb: 10,
+            pdfMb: 50
+          }
+        },
         { status: 400 }
       )
     }
 
     // Convert file to base64
     const bytes = await file.arrayBuffer()
-    const base64 = Buffer.from(bytes).toString('base64')
+    const base64 = arrayBufferToBase64(bytes)
 
     // Determine mime type
     let mimeType = file.type
@@ -95,7 +122,11 @@ export async function POST(request: NextRequest) {
           : errorText
       console.error('OCR API Error:', errorMessage || safeErrorText)
       return NextResponse.json(
-        { error: errorMessage || safeErrorText || 'OCR processing failed' },
+        {
+          error: errorMessage || safeErrorText || 'OCR processing failed',
+          code: 'OCR_API_ERROR',
+          details: safeErrorText || undefined
+        },
         { status: ocrResponse.status }
       )
     }

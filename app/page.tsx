@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
+import { PDFDocument } from "pdf-lib";
 import {
   Upload,
   FileText,
@@ -10,18 +11,149 @@ import {
   Check,
   Loader2,
   X,
-  File,
+  File as FileIcon,
   Image as ImageIcon,
 } from "lucide-react";
 
 const MAX_ERROR_BODY_LENGTH = 500;
 type OcrApiResponse = { text?: string; error?: string };
+const OCR_IMAGE_LIMIT_BYTES = 10 * 1024 * 1024;
+const OCR_PDF_LIMIT_BYTES = 50 * 1024 * 1024;
+const OCR_PDF_PAGE_LIMIT = 100;
+const DROPZONE_MAX_BYTES = 200 * 1024 * 1024;
+const PDF_CHUNK_TARGET_BYTES = 45 * 1024 * 1024;
+const PDF_CHUNK_MAX_PAGES = 40;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function replaceExtension(name: string, nextExt: string) {
+  return `${name.replace(/\.[^/.]+$/, "")}.${nextExt}`;
+}
+
+async function loadImageElement(file: File): Promise<HTMLImageElement> {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("Failed to decode image"));
+      img.src = objectUrl;
+    });
+    return image;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+async function canvasToBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
+  const blob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((createdBlob) => resolve(createdBlob), "image/jpeg", quality);
+  });
+
+  if (!blob) {
+    throw new Error("Could not encode compressed image");
+  }
+
+  return blob;
+}
+
+async function compressImageForOcr(file: File): Promise<File> {
+  if (file.size <= OCR_IMAGE_LIMIT_BYTES) {
+    return file;
+  }
+
+  const image = await loadImageElement(file);
+  const scales = [1, 0.9, 0.8, 0.7, 0.6];
+  const qualities = [0.9, 0.8, 0.7, 0.6, 0.5];
+
+  for (const scale of scales) {
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      throw new Error("Could not initialize canvas for image compression");
+    }
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    for (const quality of qualities) {
+      const blob = await canvasToBlob(canvas, quality);
+      if (blob.size <= OCR_IMAGE_LIMIT_BYTES) {
+        return new File([blob], replaceExtension(file.name, "jpg"), {
+          type: "image/jpeg",
+          lastModified: Date.now(),
+        });
+      }
+    }
+  }
+
+  throw new Error(
+    "Image is still too large after compression. Please resize it manually and try again."
+  );
+}
+
+async function createPdfChunk(
+  source: PDFDocument,
+  startPage: number,
+  endPageExclusive: number,
+  fileName: string,
+  partNumber: number
+) {
+  const chunkDoc = await PDFDocument.create();
+  const pageIndexes = Array.from(
+    { length: endPageExclusive - startPage },
+    (_, idx) => startPage + idx
+  );
+  const pages = await chunkDoc.copyPages(source, pageIndexes);
+  pages.forEach((page) => chunkDoc.addPage(page));
+  const chunkBytes = await chunkDoc.save();
+  const chunkArrayBuffer = Uint8Array.from(chunkBytes).buffer;
+
+  return new File([chunkArrayBuffer], replaceExtension(fileName, `part-${partNumber}.pdf`), {
+    type: "application/pdf",
+    lastModified: Date.now(),
+  });
+}
+
+async function splitPdfForOcr(file: File): Promise<{ chunks: File[]; pageCount: number }> {
+  const bytes = await file.arrayBuffer();
+  const source = await PDFDocument.load(bytes);
+  const pageCount = source.getPageCount();
+
+  const chunks: File[] = [];
+  let cursor = 0;
+  let partNumber = 1;
+
+  while (cursor < pageCount) {
+    let end = Math.min(cursor + PDF_CHUNK_MAX_PAGES, pageCount);
+    let chunk = await createPdfChunk(source, cursor, end, file.name, partNumber);
+
+    while (chunk.size > PDF_CHUNK_TARGET_BYTES && end - cursor > 1) {
+      end -= 1;
+      chunk = await createPdfChunk(source, cursor, end, file.name, partNumber);
+    }
+
+    if (chunk.size > OCR_PDF_LIMIT_BYTES) {
+      throw new Error(
+        "A single PDF page exceeds the OCR API file size limit. Please reduce page resolution and try again."
+      );
+    }
+
+    chunks.push(chunk);
+    cursor = end;
+    partNumber += 1;
+  }
+
+  return { chunks, pageCount };
+}
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -29,13 +161,9 @@ export default function Home() {
   const processOCR = useCallback(async (fileToProcess: File | null) => {
     if (!fileToProcess) return;
 
-    setIsProcessing(true);
-    setError(null);
-
-    try {
+    const submitFileToOcr = async (sourceFile: File) => {
       const formData = new FormData();
-      formData.append("file", fileToProcess);
-
+      formData.append("file", sourceFile);
       const response = await fetch("/api/ocr", {
         method: "POST",
         body: formData,
@@ -58,17 +186,73 @@ export default function Home() {
       } else {
         data = { error: nonJsonError };
       }
-
       if (!response.ok) {
         const statusHint = ` (HTTP ${response.status})`;
         throw new Error((data.error || "OCR processing failed") + statusHint);
       }
+      return String(data.text || "");
+    };
 
-      setText(data.text || "");
+    setIsProcessing(true);
+    setStatusMessage("Preparing file...");
+    setError(null);
+
+    try {
+      if (fileToProcess.type.startsWith("image/")) {
+        const preparedImage = await compressImageForOcr(fileToProcess);
+        setStatusMessage(
+          preparedImage.size === fileToProcess.size
+            ? "Processing image..."
+            : "Image compressed. Running OCR..."
+        );
+        const imageText = await submitFileToOcr(preparedImage);
+        setText(imageText);
+        return;
+      }
+
+      if (fileToProcess.type === "application/pdf") {
+        const needsSplitBySize = fileToProcess.size > OCR_PDF_LIMIT_BYTES;
+        if (!needsSplitBySize) {
+          const pdfBytes = await fileToProcess.arrayBuffer();
+          const pdfDoc = await PDFDocument.load(pdfBytes);
+          const pageCount = pdfDoc.getPageCount();
+          if (pageCount <= OCR_PDF_PAGE_LIMIT) {
+            setStatusMessage("Processing PDF...");
+            const pdfText = await submitFileToOcr(fileToProcess);
+            setText(pdfText);
+            return;
+          }
+        }
+
+        setStatusMessage("Splitting PDF into OCR-safe chunks...");
+        const { chunks, pageCount } = await splitPdfForOcr(fileToProcess);
+
+        if (pageCount > OCR_PDF_PAGE_LIMIT) {
+          setStatusMessage(
+            `PDF has ${pageCount} pages. Processing ${chunks.length} chunks...`
+          );
+        }
+
+        const chunkTexts: string[] = [];
+        for (let i = 0; i < chunks.length; i += 1) {
+          setStatusMessage(`Processing PDF chunk ${i + 1}/${chunks.length}...`);
+          const chunkText = await submitFileToOcr(chunks[i]);
+          chunkTexts.push(chunkText);
+          if (i < chunks.length - 1) {
+            await sleep(250);
+          }
+        }
+
+        setText(chunkTexts.filter(Boolean).join("\n\n"));
+        return;
+      }
+
+      throw new Error("Unsupported file type. Please upload an image or PDF.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setIsProcessing(false);
+      setStatusMessage(null);
     }
   }, []);
 
@@ -96,7 +280,7 @@ export default function Home() {
       "application/pdf": [".pdf"],
     },
     maxFiles: 1,
-    maxSize: 50 * 1024 * 1024,
+    maxSize: DROPZONE_MAX_BYTES,
   });
 
   useEffect(() => {
@@ -123,6 +307,7 @@ export default function Home() {
     setFile(null);
     setPreview(null);
     setText("");
+    setStatusMessage(null);
     setError(null);
   };
 
@@ -199,7 +384,7 @@ export default function Home() {
                       Drop your file here
                     </p>
                     <p className="text-sm text-cursor-muted">
-                      or click to browse
+                      or click to browse (up to 200MB, auto-chunked for OCR limits)
                     </p>
                   </div>
                   <div className="flex gap-2 mt-2">
@@ -223,7 +408,7 @@ export default function Home() {
                     {file.type.startsWith("image/") ? (
                       <ImageIcon className="w-5 h-5 text-cursor-muted" />
                     ) : (
-                      <File className="w-5 h-5 text-cursor-muted" />
+                      <FileIcon className="w-5 h-5 text-cursor-muted" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -259,7 +444,7 @@ export default function Home() {
                 {isProcessing && (
                   <div className="w-full py-3 px-4 bg-lime-500/10 border border-lime-500/40 text-lime-300 font-medium rounded-xl flex items-center justify-center gap-2">
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    Processing...
+                    {statusMessage || "Processing..."}
                   </div>
                 )}
               </div>
