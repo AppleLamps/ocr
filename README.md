@@ -10,6 +10,18 @@ A beautiful, Cursor-inspired OCR web application powered by Z.AI's GLM-OCR.
 - Download results as Markdown
 - Copy to clipboard
 
+## File Limits and Large File Handling
+
+GLM-OCR accepts single image files up to 10MB and PDF files up to 50MB.
+
+This app adds client-side preprocessing so larger uploads can still be processed:
+
+- Oversized images are automatically compressed before OCR.
+- Oversized or long PDFs are split into OCR-safe chunks and processed sequentially.
+- Chunk results are merged back into a single Markdown output in order.
+
+Note: if an individual PDF page is too large to fit under API limits even by itself, the request will still fail and the file must be reduced manually.
+
 ## Setup
 
 1. Clone the repository
