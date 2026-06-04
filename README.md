@@ -4,23 +4,29 @@ A beautiful, Cursor-inspired OCR web application powered by Z.AI's GLM-OCR.
 
 ## Features
 
-- Upload images (PNG, JPG) or PDFs
+- Upload images (PNG, JPG, WebP) or PDFs
 - Extract text using state-of-the-art OCR
 - Edit extracted text in a code editor-style interface
 - Download results as Markdown
 - Copy to clipboard
 
-## File Limits and Large File Handling
+## File Limits and Edge Cases
 
-GLM-OCR accepts single image files up to 10MB and PDF files up to 50MB.
+GLM-OCR accepts single image files up to 10MB and PDF files up to 50MB (max 100 pages per API request).
 
-This app adds client-side preprocessing so larger uploads can still be processed:
+This app handles common edge cases automatically:
 
-- Oversized images are automatically compressed before OCR.
-- Oversized or long PDFs are split into OCR-safe chunks and processed sequentially.
-- Chunk results are merged back into a single Markdown output in order.
+- **Oversized images** — compressed to JPEG under 10MB before upload.
+- **WebP** — converted to JPEG (GLM-OCR expects PNG/JPEG).
+- **Large PDFs** — split into size-safe chunks (≤50MB, ≤40 pages per chunk) and processed sequentially with part markers in the output.
+- **Long PDFs (>100 pages)** — chunked so each API call stays within the per-request page limit.
+- **Password-protected or corrupt PDFs** — clear error messages instead of generic failures.
+- **Empty OCR results** — reported explicitly when no text is detected.
+- **Rate limits / transient API errors** — automatic retries with backoff (429, 5xx).
+- **In-flight cancellation** — clearing the file aborts the current OCR request.
+- **API timeouts** — 120s server-side timeout with a helpful error message.
 
-Note: if an individual PDF page is too large to fit under API limits even by itself, the request will still fail and the file must be reduced manually.
+Note: if a single PDF page exceeds 50MB on its own, reduce scan resolution manually.
 
 ## Setup
 
