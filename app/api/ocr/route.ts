@@ -2,10 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   extractZaiErrorMessage,
   inferMimeType,
-  isPdfMime,
+  OCR_FUNCTION_FILE_LIMIT_BYTES,
   isSupportedOcrMime,
-  OCR_IMAGE_LIMIT_BYTES,
-  OCR_PDF_LIMIT_BYTES,
 } from '@/lib/ocr'
 
 // Node runtime avoids Edge request body limits (common cause of 413 on PDF uploads).
@@ -49,13 +47,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const maxSize = isPdfMime(mimeType) ? OCR_PDF_LIMIT_BYTES : OCR_IMAGE_LIMIT_BYTES
-    if (file.size > maxSize) {
+    if (file.size > OCR_FUNCTION_FILE_LIMIT_BYTES) {
       return NextResponse.json(
         {
-          error: `File too large. Maximum size is ${isPdfMime(mimeType) ? '50MB' : '10MB'} for OCR.`,
+          error: `File too large for this OCR request. Maximum upload size is ${Math.floor(
+            OCR_FUNCTION_FILE_LIMIT_BYTES / (1024 * 1024)
+          )}MB per request.`,
           code: 'FILE_TOO_LARGE',
-          limits: { imageMb: 10, pdfMb: 50 },
+          limits: { requestMb: Math.floor(OCR_FUNCTION_FILE_LIMIT_BYTES / (1024 * 1024)) },
         },
         { status: 400 }
       )

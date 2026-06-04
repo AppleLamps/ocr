@@ -20,11 +20,11 @@ import {
 } from "lucide-react";
 import {
   DROPZONE_MAX_BYTES,
+  OCR_FUNCTION_FILE_LIMIT_BYTES,
   inferMimeType,
   isImageMime,
   isPdfMime,
   isSupportedOcrMime,
-  OCR_PDF_LIMIT_BYTES,
   OCR_PDF_PAGE_LIMIT,
 } from "@/lib/ocr";
 import {
@@ -113,7 +113,7 @@ export default function Home() {
         if (abortController.signal.aborted) return;
 
         const fitsSingleRequest =
-          fileToProcess.size <= OCR_PDF_LIMIT_BYTES &&
+          fileToProcess.size <= OCR_FUNCTION_FILE_LIMIT_BYTES &&
           pageCount <= OCR_PDF_PAGE_LIMIT;
 
         if (fitsSingleRequest) {
@@ -374,7 +374,7 @@ export default function Home() {
                       {isDragActive ? "Release to upload" : "Drop your file here"}
                     </p>
                     <p className="text-sm text-cursor-muted mb-4">
-                      PNG, JPG, WebP (≤10 MB) or PDF (≤50 MB per chunk)
+                      PNG, JPG, WebP or PDF (larger files are prepared automatically)
                     </p>
                     <button
                       type="button"

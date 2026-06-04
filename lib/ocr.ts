@@ -4,6 +4,8 @@ export const OCR_IMAGE_LIMIT_BYTES = 10 * 1024 * 1024
 export const OCR_PDF_LIMIT_BYTES = 50 * 1024 * 1024
 export const OCR_PDF_PAGE_LIMIT = 100
 export const DROPZONE_MAX_BYTES = 200 * 1024 * 1024
+export const VERCEL_FUNCTION_PAYLOAD_LIMIT_BYTES = 4.5 * 1024 * 1024
+export const OCR_FUNCTION_FILE_LIMIT_BYTES = 4 * 1024 * 1024
 
 export const SUPPORTED_IMAGE_MIME_TYPES = new Set([
   'image/png',

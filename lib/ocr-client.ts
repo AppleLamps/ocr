@@ -2,13 +2,12 @@
 
 import { PDFDocument } from 'pdf-lib'
 import {
-  OCR_IMAGE_LIMIT_BYTES,
-  OCR_PDF_LIMIT_BYTES,
+  OCR_FUNCTION_FILE_LIMIT_BYTES,
   replaceExtension,
   friendlyPdfLoadError,
 } from './ocr'
 
-const PDF_CHUNK_TARGET_BYTES = 45 * 1024 * 1024
+const PDF_CHUNK_TARGET_BYTES = OCR_FUNCTION_FILE_LIMIT_BYTES
 const PDF_CHUNK_MAX_PAGES = 40
 
 export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -42,15 +41,15 @@ async function canvasToBlob(canvas: HTMLCanvasElement, quality: number): Promise
 /** GLM-OCR accepts JPG/PNG; WebP and oversized images are converted to JPEG. */
 export async function prepareImageForOcr(file: File): Promise<File> {
   const needsWebpConversion = file.type === 'image/webp'
-  const needsCompression = file.size > OCR_IMAGE_LIMIT_BYTES
+  const needsCompression = file.size > OCR_FUNCTION_FILE_LIMIT_BYTES
 
   if (!needsWebpConversion && !needsCompression) {
     return file
   }
 
   const image = await loadImageElement(file)
-  const scales = needsCompression ? [1, 0.9, 0.8, 0.7, 0.6] : [1]
-  const qualities = needsCompression ? [0.9, 0.8, 0.7, 0.6, 0.5] : [0.92]
+  const scales = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4]
+  const qualities = [0.92, 0.82, 0.72, 0.62, 0.52, 0.42]
 
   for (const scale of scales) {
     const canvas = document.createElement('canvas')
@@ -65,7 +64,7 @@ export async function prepareImageForOcr(file: File): Promise<File> {
 
     for (const quality of qualities) {
       const blob = await canvasToBlob(canvas, quality)
-      if (!needsCompression || blob.size <= OCR_IMAGE_LIMIT_BYTES) {
+      if (blob.size <= OCR_FUNCTION_FILE_LIMIT_BYTES) {
         return new File([blob], replaceExtension(file.name, 'jpg'), {
           type: 'image/jpeg',
           lastModified: Date.now(),
@@ -129,9 +128,9 @@ export async function splitPdfForOcr(file: File): Promise<{ chunks: File[]; page
       chunk = await createPdfChunk(source, cursor, end, file.name, partNumber)
     }
 
-    if (chunk.size > OCR_PDF_LIMIT_BYTES) {
+    if (chunk.size > OCR_FUNCTION_FILE_LIMIT_BYTES) {
       throw new Error(
-        'A single PDF page exceeds the OCR API file size limit. Please reduce page resolution and try again.'
+        'A single PDF page exceeds the upload size limit. Please reduce page resolution and try again.'
       )
     }
 
