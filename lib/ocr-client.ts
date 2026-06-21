@@ -2,13 +2,16 @@
 
 import { PDFDocument } from 'pdf-lib'
 import {
-  OCR_FUNCTION_FILE_LIMIT_BYTES,
+  OCR_IMAGE_LIMIT_BYTES,
+  OCR_PDF_LIMIT_BYTES,
+  OCR_PDF_PAGE_LIMIT,
   replaceExtension,
   friendlyPdfLoadError,
 } from './ocr'
 
-const PDF_CHUNK_TARGET_BYTES = OCR_FUNCTION_FILE_LIMIT_BYTES
-const PDF_CHUNK_MAX_PAGES = 40
+// Chunks only exist to stay within the API's own per-request limits.
+const PDF_CHUNK_TARGET_BYTES = OCR_PDF_LIMIT_BYTES
+const PDF_CHUNK_MAX_PAGES = OCR_PDF_PAGE_LIMIT
 
 export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -41,7 +44,7 @@ async function canvasToBlob(canvas: HTMLCanvasElement, quality: number): Promise
 /** GLM-OCR accepts JPG/PNG; WebP and oversized images are converted to JPEG. */
 export async function prepareImageForOcr(file: File): Promise<File> {
   const needsWebpConversion = file.type === 'image/webp'
-  const needsCompression = file.size > OCR_FUNCTION_FILE_LIMIT_BYTES
+  const needsCompression = file.size > OCR_IMAGE_LIMIT_BYTES
 
   if (!needsWebpConversion && !needsCompression) {
     return file
@@ -64,7 +67,7 @@ export async function prepareImageForOcr(file: File): Promise<File> {
 
     for (const quality of qualities) {
       const blob = await canvasToBlob(canvas, quality)
-      if (blob.size <= OCR_FUNCTION_FILE_LIMIT_BYTES) {
+      if (blob.size <= OCR_IMAGE_LIMIT_BYTES) {
         return new File([blob], replaceExtension(file.name, 'jpg'), {
           type: 'image/jpeg',
           lastModified: Date.now(),
@@ -128,7 +131,7 @@ export async function splitPdfForOcr(file: File): Promise<{ chunks: File[]; page
       chunk = await createPdfChunk(source, cursor, end, file.name, partNumber)
     }
 
-    if (chunk.size > OCR_FUNCTION_FILE_LIMIT_BYTES) {
+    if (chunk.size > OCR_PDF_LIMIT_BYTES) {
       throw new Error(
         'A single PDF page exceeds the upload size limit. Please reduce page resolution and try again.'
       )
