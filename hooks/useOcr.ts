@@ -15,8 +15,13 @@ import {
   splitPdfForOcr,
 } from "@/lib/ocr-client";
 import { submitFileToOcr } from "@/lib/ocr-fetch";
+import { mapWithConcurrency } from "@/lib/concurrency";
 
 export type OcrProgress = { current: number; total: number };
+
+// How many chunk requests run at once. Kept modest so a multi-chunk PDF does
+// not burst past the API/rate-limit budget while still cutting wall-clock time.
+const OCR_CHUNK_CONCURRENCY = 4;
 
 /**
  * Owns the OCR pipeline: file preparation, single vs. chunked requests,
@@ -93,24 +98,26 @@ export function useOcr() {
           await splitPdfForOcr(fileToProcess);
         if (abortController.signal.aborted) return;
 
-        if (totalPages > OCR_PDF_PAGE_LIMIT) {
-          setStatusMessage(
-            `Processing ${chunks.length} chunks (${totalPages} pages)...`
-          );
-        }
-
+        setStatusMessage(
+          `Processing ${chunks.length} chunks${
+            totalPages > OCR_PDF_PAGE_LIMIT ? ` (${totalPages} pages)` : ""
+          }...`
+        );
         setProgress({ current: 0, total: chunks.length });
 
-        const chunkTexts: string[] = [];
-        for (let i = 0; i < chunks.length; i += 1) {
-          if (abortController.signal.aborted) return;
-          setProgress({ current: i + 1, total: chunks.length });
-          setStatusMessage(`Processing chunk ${i + 1} of ${chunks.length}...`);
-          const chunkText = await submitFileToOcr(chunks[i], {
-            signal: abortController.signal,
-          });
-          chunkTexts.push(chunkText);
-        }
+        // Process chunks with bounded concurrency rather than one-at-a-time;
+        // results stay in page order. `completed` drives the progress bar since
+        // chunks no longer finish sequentially.
+        let completed = 0;
+        const chunkTexts = await mapWithConcurrency(
+          chunks,
+          OCR_CHUNK_CONCURRENCY,
+          (chunk) => submitFileToOcr(chunk, { signal: abortController.signal }),
+          () => {
+            completed += 1;
+            setProgress({ current: completed, total: chunks.length });
+          }
+        );
 
         if (abortController.signal.aborted) return;
         setText(

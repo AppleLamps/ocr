@@ -18,7 +18,7 @@ This app handles common edge cases automatically:
 
 - **Oversized images** — compressed to JPEG under 10MB before upload.
 - **WebP** — converted to JPEG (GLM-OCR expects PNG/JPEG).
-- **Large PDFs** — split into API-safe chunks (≤50MB, ≤30 pages per chunk) and processed sequentially with part markers in the output.
+- **Large PDFs** — split into API-safe chunks (≤50MB, ≤30 pages per chunk) and processed with bounded concurrency (4 in flight), with part markers in the output.
 - **Long PDFs (>30 pages)** — chunked so each API call stays within the per-request page limit.
 - **Password-protected or corrupt PDFs** — clear error messages instead of generic failures.
 - **Empty OCR results** — reported explicitly when no text is detected.
