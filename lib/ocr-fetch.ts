@@ -1,4 +1,5 @@
 import { upload } from '@vercel/blob/client'
+import { getBlobAccess } from './blob'
 import { isRetryableHttpStatus } from './ocr'
 import { sleep } from './ocr-client'
 
@@ -41,7 +42,7 @@ async function parseOcrResponse(response: Response): Promise<OcrApiResponse> {
  */
 async function uploadToBlob(file: File, signal?: AbortSignal): Promise<string> {
   const result = await upload(`ocr-uploads/${file.name}`, file, {
-    access: 'public',
+    access: getBlobAccess(),
     handleUploadUrl: '/api/blob-upload',
     contentType: file.type || undefined,
     abortSignal: signal,

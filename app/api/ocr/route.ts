@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { del, head } from '@vercel/blob'
+import { del, get, head } from '@vercel/blob'
 import {
   extractZaiErrorMessage,
   isPdfMime,
@@ -7,7 +7,7 @@ import {
   OCR_IMAGE_LIMIT_BYTES,
   OCR_PDF_LIMIT_BYTES,
 } from '@/lib/ocr'
-import { getBlobToken, isOwnBlobUrl } from '@/lib/blob'
+import { getBlobToken, isOwnBlobUrl, isPrivateBlobUrl } from '@/lib/blob'
 import { checkRateLimit, getClientIdentifier } from '@/lib/rate-limit'
 
 // Node runtime avoids Edge request body limits and matches the blob SDK.
@@ -33,6 +33,25 @@ function isAllowedOrigin(request: NextRequest): boolean {
   } catch {
     return false
   }
+}
+
+async function resolveZaiFileInput(
+  blobUrl: string,
+  mimeType: string,
+  blobToken: string
+): Promise<string> {
+  if (!isPrivateBlobUrl(blobUrl)) {
+    return blobUrl
+  }
+
+  const blob = await get(blobUrl, { access: 'private', token: blobToken })
+  if (!blob) {
+    throw new Error('Uploaded file not found in blob storage.')
+  }
+
+  const bytes = await new Response(blob.stream).arrayBuffer()
+  const base64 = Buffer.from(bytes).toString('base64')
+  return `data:${mimeType || 'application/octet-stream'};base64,${base64}`
 }
 
 export async function POST(request: NextRequest) {
@@ -126,6 +145,8 @@ export async function POST(request: NextRequest) {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), OCR_API_TIMEOUT_MS)
 
+    const zaiFile = await resolveZaiFileInput(blobUrl, mimeType, blobToken)
+
     let ocrResponse: Response
     try {
       ocrResponse = await fetch('https://api.z.ai/api/paas/v4/layout_parsing', {
@@ -136,7 +157,7 @@ export async function POST(request: NextRequest) {
         },
         body: JSON.stringify({
           model: 'glm-ocr',
-          file: blobUrl,
+          file: zaiFile,
         }),
         signal: controller.signal,
       })

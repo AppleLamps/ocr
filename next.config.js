@@ -31,8 +31,14 @@ const securityHeaders = [
   },
 ]
 
+const blobAccess = process.env.BLOB_ACCESS || process.env.zaiblob_ACCESS || 'private'
+
 const nextConfig = {
   reactStrictMode: true,
+  env: {
+    // Keep client uploads aligned with the Blob store (public vs private).
+    NEXT_PUBLIC_BLOB_ACCESS: blobAccess,
+  },
   async headers() {
     return [
       {

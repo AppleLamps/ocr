@@ -57,7 +57,9 @@ the file directly by URL. The blob is deleted once OCR completes.
    ZAI_API_KEY=your-api-key-here
    zaiblob_READ_WRITE_TOKEN=your-blob-read-write-token
    zaiblob_STORE_ID=your-blob-store-id
+   BLOB_ACCESS=private
    ```
+   Set `BLOB_ACCESS=public` only if your Blob store was created with public access. New Vercel Blob stores default to **private**; mismatched access causes upload failures that look like CORS errors in the browser.
    Optional rate-limit overrides:
    ```
    OCR_RATE_LIMIT_MAX=10

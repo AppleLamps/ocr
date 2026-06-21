@@ -63,9 +63,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         maximumSizeInBytes: Math.max(OCR_IMAGE_LIMIT_BYTES, OCR_PDF_LIMIT_BYTES),
         addRandomSuffix: true,
       }),
-      // onUploadCompleted requires a public webhook callback and is not needed:
-      // the browser calls /api/ocr with the blob URL once the upload resolves.
-      onUploadCompleted: async () => {},
     })
 
     return NextResponse.json(jsonResponse)
