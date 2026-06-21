@@ -32,9 +32,18 @@ Note: if a single PDF page exceeds 50MB on its own, reduce scan resolution manua
 
 The OCR endpoint forwards every request to Z.AI's paid API, so it is protected against casual abuse:
 
-- **Rate limiting** — a per-IP fixed-window limiter on `/api/ocr` (defaults: 10 requests / 60s). State is in-memory, so on multi-instance / serverless deployments back it with a shared store (e.g. Vercel KV) for strict quotas.
+- **Rate limiting** — a per-IP fixed-window limiter on `/api/ocr` and `/api/blob-upload` (defaults: 10 requests / 60s). State is in-memory, so on multi-instance / serverless deployments back it with a shared store (e.g. Vercel KV) for strict quotas.
 - **Same-origin guard** — cross-origin `POST`s are rejected with `403` so other sites cannot spend your quota.
+- **Validated blob references** — `/api/ocr` only accepts URLs on this project's own Blob store, then deletes the blob after the OCR call so uploads are not left publicly readable.
 - **Security headers** — CSP, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, and `Permissions-Policy` are applied to every route in `next.config.js`.
+
+## Upload flow
+
+Files are uploaded straight from the browser to Vercel Blob storage (via a
+short-lived client token from `/api/blob-upload`), and only the resulting URL is
+sent to `/api/ocr`. This bypasses the serverless function payload limit and the
+~33% overhead of base64-encoding the file through the API, and lets Z.AI fetch
+the file directly by URL. The blob is deleted once OCR completes.
 
 ## Setup
 
@@ -43,9 +52,11 @@ The OCR endpoint forwards every request to Z.AI's paid API, so it is protected a
    ```bash
    npm install
    ```
-3. Create a `.env.local` file with your Z.AI API key (see `.env.example`):
+3. Create a `.env.local` file with your Z.AI API key and Vercel Blob token (see `.env.example`):
    ```
    ZAI_API_KEY=your-api-key-here
+   zaiblob_READ_WRITE_TOKEN=your-blob-read-write-token
+   zaiblob_STORE_ID=your-blob-store-id
    ```
    Optional rate-limit overrides:
    ```
@@ -70,8 +81,9 @@ npm run test:watch
 
 1. Push your code to GitHub
 2. Import the project to Vercel
-3. Add the `ZAI_API_KEY` environment variable in Vercel settings
-4. Deploy
+3. Create a Blob store for the project (its token/store id are exposed under the `zaiblob_` prefix)
+4. Add the `ZAI_API_KEY` (and confirm the `zaiblob_READ_WRITE_TOKEN` / `zaiblob_STORE_ID`) environment variables in Vercel settings
+5. Deploy
 
 ## Tech Stack
 

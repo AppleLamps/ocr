@@ -1,21 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { del, head } from '@vercel/blob'
 import {
   extractZaiErrorMessage,
-  inferMimeType,
-  OCR_FUNCTION_FILE_LIMIT_BYTES,
+  isPdfMime,
   isSupportedOcrMime,
+  OCR_IMAGE_LIMIT_BYTES,
+  OCR_PDF_LIMIT_BYTES,
 } from '@/lib/ocr'
+import { getBlobToken, isOwnBlobUrl } from '@/lib/blob'
 import { checkRateLimit, getClientIdentifier } from '@/lib/rate-limit'
 
-// Node runtime avoids Edge request body limits (common cause of 413 on PDF uploads).
+// Node runtime avoids Edge request body limits and matches the blob SDK.
 export const runtime = 'nodejs'
 
 const MAX_ERROR_TEXT_LENGTH = 2000
 const OCR_API_TIMEOUT_MS = 120_000
-
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  return Buffer.from(buffer).toString('base64')
-}
 
 /**
  * Reject cross-site callers. The endpoint exists to serve this app's own
@@ -37,6 +36,9 @@ function isAllowedOrigin(request: NextRequest): boolean {
 }
 
 export async function POST(request: NextRequest) {
+  let blobUrl: string | null = null
+  let blobToken: string | undefined
+
   try {
     if (!isAllowedOrigin(request)) {
       return NextResponse.json(
@@ -63,24 +65,40 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const formData = await request.formData()
-    const file = formData.get('file') as File | null
+    const payload = (await request.json().catch(() => null)) as { blobUrl?: unknown } | null
+    const candidate = typeof payload?.blobUrl === 'string' ? payload.blobUrl : ''
 
-    if (!file) {
+    // The URL is handed to Z.AI to fetch and is later deleted, so it must point
+    // at our own Blob store and nowhere else.
+    if (!candidate || !isOwnBlobUrl(candidate)) {
       return NextResponse.json(
-        { error: 'No file provided', code: 'NO_FILE' },
+        { error: 'A valid uploaded file reference is required.', code: 'INVALID_BLOB_URL' },
         { status: 400 }
       )
     }
+    blobUrl = candidate
 
-    if (file.size === 0) {
+    blobToken = getBlobToken()
+    if (!blobToken) {
       return NextResponse.json(
-        { error: 'File is empty', code: 'EMPTY_FILE' },
-        { status: 400 }
+        { error: 'Blob storage is not configured', code: 'MISSING_BLOB_TOKEN' },
+        { status: 500 }
       )
     }
 
-    const mimeType = inferMimeType(file.name, file.type)
+    const apiKey = process.env.ZAI_API_KEY
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'API key not configured', code: 'MISSING_API_KEY' },
+        { status: 500 }
+      )
+    }
+
+    // Authoritative type/size, straight from the store (the client's values are
+    // untrusted). This also confirms the blob actually exists.
+    const meta = await head(blobUrl, { token: blobToken })
+    const mimeType = meta.contentType || ''
+
     if (!isSupportedOcrMime(mimeType)) {
       return NextResponse.json(
         {
@@ -92,28 +110,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (file.size > OCR_FUNCTION_FILE_LIMIT_BYTES) {
+    const sizeLimit = isPdfMime(mimeType) ? OCR_PDF_LIMIT_BYTES : OCR_IMAGE_LIMIT_BYTES
+    if (meta.size > sizeLimit) {
       return NextResponse.json(
         {
-          error: `File too large for this OCR request. Maximum upload size is ${Math.floor(
-            OCR_FUNCTION_FILE_LIMIT_BYTES / (1024 * 1024)
-          )}MB per request.`,
+          error: `File too large for OCR. Maximum is ${Math.floor(
+            sizeLimit / (1024 * 1024)
+          )}MB for this file type.`,
           code: 'FILE_TOO_LARGE',
-          limits: { requestMb: Math.floor(OCR_FUNCTION_FILE_LIMIT_BYTES / (1024 * 1024)) },
         },
         { status: 400 }
-      )
-    }
-
-    const bytes = await file.arrayBuffer()
-    const base64 = arrayBufferToBase64(bytes)
-    const dataUrl = `data:${mimeType};base64,${base64}`
-
-    const apiKey = process.env.ZAI_API_KEY
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'API key not configured', code: 'MISSING_API_KEY' },
-        { status: 500 }
       )
     }
 
@@ -130,7 +136,7 @@ export async function POST(request: NextRequest) {
         },
         body: JSON.stringify({
           model: 'glm-ocr',
-          file: dataUrl,
+          file: blobUrl,
         }),
         signal: controller.signal,
       })
@@ -201,5 +207,12 @@ export async function POST(request: NextRequest) {
       },
       { status: 500 }
     )
+  } finally {
+    // Always clean up the uploaded blob; it is only needed for the OCR call.
+    if (blobUrl && blobToken) {
+      await del(blobUrl, { token: blobToken }).catch((err) => {
+        console.error('Blob cleanup failed:', err)
+      })
+    }
   }
 }

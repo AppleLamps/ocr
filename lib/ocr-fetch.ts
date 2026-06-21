@@ -1,4 +1,5 @@
-import { extractZaiErrorMessage, isRetryableHttpStatus } from './ocr'
+import { upload } from '@vercel/blob/client'
+import { isRetryableHttpStatus } from './ocr'
 import { sleep } from './ocr-client'
 
 export type OcrApiResponse = {
@@ -33,6 +34,21 @@ async function parseOcrResponse(response: Response): Promise<OcrApiResponse> {
   }
 }
 
+/**
+ * Upload the file straight to Blob storage from the browser. This bypasses the
+ * serverless function payload limit (no more base64 round-trip through our API)
+ * and lets Z.AI fetch the file by URL.
+ */
+async function uploadToBlob(file: File, signal?: AbortSignal): Promise<string> {
+  const result = await upload(`ocr-uploads/${file.name}`, file, {
+    access: 'public',
+    handleUploadUrl: '/api/blob-upload',
+    contentType: file.type || undefined,
+    abortSignal: signal,
+  })
+  return result.url
+}
+
 export async function submitFileToOcr(
   sourceFile: File,
   options?: { signal?: AbortSignal }
@@ -44,14 +60,29 @@ export async function submitFileToOcr(
       throw new Error('OCR cancelled')
     }
 
-    const formData = new FormData()
-    formData.append('file', sourceFile)
+    // Upload per attempt: the API deletes the blob after it responds, so a retry
+    // needs a fresh upload. This only re-uploads on the rare failure path.
+    let blobUrl: string
+    try {
+      blobUrl = await uploadToBlob(sourceFile, options?.signal)
+    } catch (error) {
+      if (options?.signal?.aborted) {
+        throw new Error('OCR cancelled')
+      }
+      lastError = error instanceof Error ? error : new Error(String(error))
+      if (attempt < MAX_RETRIES - 1) {
+        await sleep(RETRY_BASE_MS * 2 ** attempt)
+        continue
+      }
+      throw lastError
+    }
 
     let response: Response
     try {
       response = await fetch('/api/ocr', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blobUrl }),
         signal: options?.signal,
       })
     } catch (error) {
