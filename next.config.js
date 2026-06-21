@@ -2,8 +2,10 @@
 
 // Security headers applied to every route. The CSP is intentionally strict;
 // 'unsafe-inline' is required for Next.js's injected runtime styles/scripts.
-// connect-src allows this app's own API plus the Vercel Blob ingest host, which
-// the browser uploads to directly (the Z.AI call happens server-side).
+// connect-src allows this app's own API plus the Vercel Blob hosts the browser
+// uploads to directly. The @vercel/blob v2 client sends uploads to its API at
+// https://vercel.com/api/blob, which may hand off to the *.public.blob host;
+// both must be allowed. (The Z.AI fetch of the blob happens server-side.)
 const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'X-Frame-Options', value: 'DENY' },
@@ -21,7 +23,7 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "img-src 'self' data: blob:",
       "font-src 'self' https://fonts.gstatic.com",
-      "connect-src 'self' https://blob.vercel-storage.com",
+      "connect-src 'self' https://vercel.com https://*.public.blob.vercel-storage.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
