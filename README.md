@@ -28,6 +28,14 @@ This app handles common edge cases automatically:
 
 Note: if a single PDF page exceeds 50MB on its own, reduce scan resolution manually.
 
+## Security
+
+The OCR endpoint forwards every request to Z.AI's paid API, so it is protected against casual abuse:
+
+- **Rate limiting** — a per-IP fixed-window limiter on `/api/ocr` (defaults: 10 requests / 60s). State is in-memory, so on multi-instance / serverless deployments back it with a shared store (e.g. Vercel KV) for strict quotas.
+- **Same-origin guard** — cross-origin `POST`s are rejected with `403` so other sites cannot spend your quota.
+- **Security headers** — CSP, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, and `Permissions-Policy` are applied to every route in `next.config.js`.
+
 ## Setup
 
 1. Clone the repository
@@ -35,14 +43,28 @@ Note: if a single PDF page exceeds 50MB on its own, reduce scan resolution manua
    ```bash
    npm install
    ```
-3. Create a `.env.local` file with your Z.AI API key:
+3. Create a `.env.local` file with your Z.AI API key (see `.env.example`):
    ```
    ZAI_API_KEY=your-api-key-here
+   ```
+   Optional rate-limit overrides:
+   ```
+   OCR_RATE_LIMIT_MAX=10
+   OCR_RATE_LIMIT_WINDOW_MS=60000
    ```
 4. Run the development server:
    ```bash
    npm run dev
    ```
+
+## Testing
+
+Unit tests (Vitest) cover the shared OCR helpers and the rate limiter:
+
+```bash
+npm test          # run once
+npm run test:watch
+```
 
 ## Deploy to Vercel
 

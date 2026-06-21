@@ -5,6 +5,7 @@ import {
   OCR_FUNCTION_FILE_LIMIT_BYTES,
   isSupportedOcrMime,
 } from '@/lib/ocr'
+import { checkRateLimit, getClientIdentifier } from '@/lib/rate-limit'
 
 // Node runtime avoids Edge request body limits (common cause of 413 on PDF uploads).
 export const runtime = 'nodejs'
@@ -16,8 +17,52 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return Buffer.from(buffer).toString('base64')
 }
 
+/**
+ * Reject cross-site callers. The endpoint exists to serve this app's own
+ * frontend; blocking foreign origins stops other sites from spending the
+ * Z.AI quota. Same-origin requests omit the Origin header on some browsers,
+ * so a missing Origin is treated as allowed (it cannot be cross-site).
+ */
+function isAllowedOrigin(request: NextRequest): boolean {
+  const origin = request.headers.get('origin')
+  if (!origin) return true
+
+  try {
+    const originHost = new URL(origin).host
+    const host = request.headers.get('host')
+    return Boolean(host) && originHost === host
+  } catch {
+    return false
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
+    if (!isAllowedOrigin(request)) {
+      return NextResponse.json(
+        { error: 'Cross-origin requests are not allowed.', code: 'FORBIDDEN_ORIGIN' },
+        { status: 403 }
+      )
+    }
+
+    const rate = checkRateLimit(getClientIdentifier(request.headers))
+    if (!rate.allowed) {
+      return NextResponse.json(
+        {
+          error: 'Too many requests. Please wait a moment and try again.',
+          code: 'RATE_LIMITED',
+        },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(rate.retryAfterSeconds),
+            'X-RateLimit-Limit': String(rate.limit),
+            'X-RateLimit-Remaining': String(rate.remaining),
+          },
+        }
+      )
+    }
+
     const formData = await request.formData()
     const file = formData.get('file') as File | null
 
