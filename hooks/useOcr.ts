@@ -6,7 +6,7 @@ import {
   isImageMime,
   isPdfMime,
   isSupportedOcrMime,
-  OCR_FUNCTION_FILE_LIMIT_BYTES,
+  OCR_PDF_LIMIT_BYTES,
   OCR_PDF_PAGE_LIMIT,
 } from "@/lib/ocr";
 import {
@@ -75,7 +75,7 @@ export function useOcr() {
         if (abortController.signal.aborted) return;
 
         const fitsSingleRequest =
-          fileToProcess.size <= OCR_FUNCTION_FILE_LIMIT_BYTES &&
+          fileToProcess.size <= OCR_PDF_LIMIT_BYTES &&
           pageCount <= OCR_PDF_PAGE_LIMIT;
 
         if (fitsSingleRequest) {

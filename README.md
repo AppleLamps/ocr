@@ -12,14 +12,14 @@ A beautiful, Cursor-inspired OCR web application powered by Z.AI's GLM-OCR.
 
 ## File Limits and Edge Cases
 
-GLM-OCR accepts single image files up to 10MB and PDF files up to 50MB (max 100 pages per API request).
+GLM-OCR accepts single image files up to 10MB and PDF files up to 50MB (max 30 pages per API request). These API limits are the only file-size constraints — files are uploaded directly to Blob storage, so they no longer pass through (and are not capped by) the serverless function body limit.
 
 This app handles common edge cases automatically:
 
 - **Oversized images** — compressed to JPEG under 10MB before upload.
 - **WebP** — converted to JPEG (GLM-OCR expects PNG/JPEG).
-- **Large PDFs** — split into size-safe chunks (≤50MB, ≤40 pages per chunk) and processed sequentially with part markers in the output.
-- **Long PDFs (>100 pages)** — chunked so each API call stays within the per-request page limit.
+- **Large PDFs** — split into API-safe chunks (≤50MB, ≤30 pages per chunk) and processed sequentially with part markers in the output.
+- **Long PDFs (>30 pages)** — chunked so each API call stays within the per-request page limit.
 - **Password-protected or corrupt PDFs** — clear error messages instead of generic failures.
 - **Empty OCR results** — reported explicitly when no text is detected.
 - **Rate limits / transient API errors** — automatic retries with backoff (429, 5xx).
