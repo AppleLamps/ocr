@@ -9,6 +9,12 @@ A beautiful, Cursor-inspired OCR web application powered by Z.AI's GLM-OCR.
 - Edit extracted text in a code editor-style interface
 - Download results as Markdown
 - Copy to clipboard
+- **Layout visualization** — toggle between the original preview and GLM-OCR's annotated layout image
+- **Structured extraction view** — browse detected text, tables, formulas, and images as grouped cards with dimensions and element counts
+- **Table rendering** — HTML tables returned by the OCR are rendered as styled tables in the preview and structured views
+- **Math formula rendering** — LaTeX formulas are rendered with KaTeX in both preview and structured views
+- **PDF page-range selection** — process a specific page range for large PDFs (uses the API's native 30-page window)
+- **Polished, responsive UI** — two-column layout with a clear button hierarchy, focused file/preview/status grouping, and keyboard-friendly controls
 
 ## File Limits and Edge Cases
 

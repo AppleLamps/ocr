@@ -104,7 +104,12 @@ async function createPdfChunk(
   })
 }
 
-export async function splitPdfForOcr(file: File): Promise<{ chunks: File[]; pageCount: number }> {
+export type PdfPageRange = { start: number; end: number }
+
+export async function splitPdfForOcr(
+  file: File,
+  pageRange?: PdfPageRange
+): Promise<{ chunks: File[]; pageCount: number }> {
   let source: PDFDocument
   try {
     const bytes = await file.arrayBuffer()
@@ -118,12 +123,25 @@ export async function splitPdfForOcr(file: File): Promise<{ chunks: File[]; page
     throw new Error('This PDF has no pages to process.')
   }
 
+  if (pageRange) {
+    if (
+      pageRange.start < 1 ||
+      pageRange.end > pageCount ||
+      pageRange.end < pageRange.start
+    ) {
+      throw new Error('Invalid page range for this PDF.')
+    }
+  }
+
+  const rangeStart = pageRange ? pageRange.start - 1 : 0
+  const rangeEndExclusive = pageRange ? pageRange.end : pageCount
+
   const chunks: File[] = []
-  let cursor = 0
+  let cursor = rangeStart
   let partNumber = 1
 
-  while (cursor < pageCount) {
-    let end = Math.min(cursor + PDF_CHUNK_MAX_PAGES, pageCount)
+  while (cursor < rangeEndExclusive) {
+    let end = Math.min(cursor + PDF_CHUNK_MAX_PAGES, rangeEndExclusive)
     let chunk = await createPdfChunk(source, cursor, end, file.name, partNumber)
 
     while (chunk.size > PDF_CHUNK_TARGET_BYTES && end - cursor > 1) {
@@ -142,7 +160,7 @@ export async function splitPdfForOcr(file: File): Promise<{ chunks: File[]; page
     partNumber += 1
   }
 
-  return { chunks, pageCount }
+  return { chunks, pageCount: rangeEndExclusive - rangeStart }
 }
 
 export async function loadPdfPageCount(file: File): Promise<number> {

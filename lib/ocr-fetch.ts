@@ -3,11 +3,22 @@ import type { BlobAccess } from './blob'
 import { isRetryableHttpStatus } from './ocr'
 import { sleep } from './ocr-client'
 
+export type LayoutDetail = {
+  index: number
+  label: string
+  bbox_2d: number[]
+  content: string
+  height: number
+  width: number
+}
+
 export type OcrApiResponse = {
   text?: string
   error?: string
   code?: string
   empty?: boolean
+  layoutDetails?: LayoutDetail[] | null
+  layoutVisualization?: string[] | null
 }
 
 const MAX_ERROR_BODY_LENGTH = 500
@@ -66,10 +77,31 @@ async function uploadToBlob(file: File, signal?: AbortSignal): Promise<string> {
   return result.url
 }
 
+/** Best-effort cleanup when /api/ocr was never reached after a client upload. */
+async function deleteUploadedBlob(blobUrl: string): Promise<void> {
+  try {
+    await fetch('/api/blob-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ blobUrl }),
+    })
+  } catch {
+    // Non-fatal; orphaned blobs are preferable to blocking the user.
+  }
+}
+
+export type PageRange = { start: number; end: number }
+
+export type OcrResult = {
+  text: string
+  layoutDetails: LayoutDetail[] | null
+  layoutVisualization: string[] | null
+}
+
 export async function submitFileToOcr(
   sourceFile: File,
-  options?: { signal?: AbortSignal }
-): Promise<string> {
+  options?: { signal?: AbortSignal; pageRange?: PageRange }
+): Promise<OcrResult> {
   let lastError: Error | null = null
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
@@ -77,8 +109,6 @@ export async function submitFileToOcr(
       throw new Error('OCR cancelled')
     }
 
-    // Upload per attempt: the API deletes the blob after it responds, so a retry
-    // needs a fresh upload. This only re-uploads on the rare failure path.
     let blobUrl: string
     try {
       blobUrl = await uploadToBlob(sourceFile, options?.signal)
@@ -96,16 +126,22 @@ export async function submitFileToOcr(
 
     let response: Response
     try {
+      const body: { blobUrl: string; startPage?: number; endPage?: number } = { blobUrl }
+      if (options?.pageRange) {
+        body.startPage = options.pageRange.start
+        body.endPage = options.pageRange.end
+      }
       response = await fetch('/api/ocr', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ blobUrl }),
+        body: JSON.stringify(body),
         signal: options?.signal,
       })
     } catch (error) {
       if (options?.signal?.aborted) {
         throw new Error('OCR cancelled')
       }
+      await deleteUploadedBlob(blobUrl)
       lastError = error instanceof Error ? error : new Error(String(error))
       if (attempt < MAX_RETRIES - 1) {
         await sleep(RETRY_BASE_MS * 2 ** attempt)
@@ -139,7 +175,11 @@ export async function submitFileToOcr(
       throw new Error('OCR returned an empty result.')
     }
 
-    return text
+    return {
+      text,
+      layoutDetails: data.layoutDetails ?? null,
+      layoutVisualization: data.layoutVisualization ?? null,
+    }
   }
 
   throw lastError || new Error('OCR processing failed')

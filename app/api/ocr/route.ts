@@ -6,6 +6,7 @@ import {
   isSupportedOcrMime,
   OCR_IMAGE_LIMIT_BYTES,
   OCR_PDF_LIMIT_BYTES,
+  OCR_PDF_PAGE_LIMIT,
 } from '@/lib/ocr'
 import { getBlobToken, isOwnBlobUrl, isPrivateBlobUrl } from '@/lib/blob'
 import { checkRateLimit, getClientIdentifier } from '@/lib/rate-limit'
@@ -84,8 +85,50 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const payload = (await request.json().catch(() => null)) as { blobUrl?: unknown } | null
+    const payload = (await request.json().catch(() => null)) as {
+      blobUrl?: unknown
+      startPage?: unknown
+      endPage?: unknown
+    } | null
     const candidate = typeof payload?.blobUrl === 'string' ? payload.blobUrl : ''
+    const startPage =
+      typeof payload?.startPage === 'number' && payload.startPage >= 1
+        ? payload.startPage
+        : undefined
+    const endPage =
+      typeof payload?.endPage === 'number' && payload.endPage >= 1
+        ? payload.endPage
+        : undefined
+
+    if (startPage !== undefined || endPage !== undefined) {
+      if (startPage === undefined || endPage === undefined) {
+        return NextResponse.json(
+          {
+            error: 'Both startPage and endPage are required when specifying a page range.',
+            code: 'INVALID_PAGE_RANGE',
+          },
+          { status: 400 }
+        )
+      }
+      if (endPage < startPage) {
+        return NextResponse.json(
+          {
+            error: 'endPage must be greater than or equal to startPage.',
+            code: 'INVALID_PAGE_RANGE',
+          },
+          { status: 400 }
+        )
+      }
+      if (endPage - startPage + 1 > OCR_PDF_PAGE_LIMIT) {
+        return NextResponse.json(
+          {
+            error: `Page range exceeds the ${OCR_PDF_PAGE_LIMIT}-page limit per OCR request.`,
+            code: 'PAGE_RANGE_TOO_LARGE',
+          },
+          { status: 400 }
+        )
+      }
+    }
 
     // The URL is handed to Z.AI to fetch and is later deleted, so it must point
     // at our own Blob store and nowhere else.
@@ -158,6 +201,9 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           model: 'glm-ocr',
           file: zaiFile,
+          need_layout_visualization: true,
+          ...(startPage !== undefined && { start_page_id: startPage }),
+          ...(endPage !== undefined && { end_page_id: endPage }),
         }),
         signal: controller.signal,
       })
@@ -207,6 +253,15 @@ export async function POST(request: NextRequest) {
 
     const result = (await ocrResponse.json()) as {
       md_results?: string
+      layout_details?: Array<{
+        index: number
+        label: string
+        bbox_2d: number[]
+        content: string
+        height: number
+        width: number
+      }>
+      layout_visualization?: string[]
       id?: string
       usage?: unknown
     }
@@ -218,6 +273,8 @@ export async function POST(request: NextRequest) {
       empty: text.length === 0,
       id: result.id,
       usage: result.usage,
+      layoutDetails: result.layout_details ?? null,
+      layoutVisualization: result.layout_visualization ?? null,
     })
   } catch (error) {
     console.error('OCR Error:', error)

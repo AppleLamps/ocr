@@ -6,9 +6,11 @@ import {
   DROPZONE_MAX_BYTES,
   inferMimeType,
   isImageMime,
+  isPdfMime,
   isSupportedOcrMime,
 } from "@/lib/ocr";
 import { useOcr } from "@/hooks/useOcr";
+import { loadPdfPageCount } from "@/lib/ocr-client";
 import { AppHeader } from "@/components/AppHeader";
 import { AppFooter } from "@/components/AppFooter";
 import { DropOverlay } from "@/components/DropOverlay";
@@ -37,11 +39,15 @@ export default function Home() {
   const [preview, setPreview] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("raw");
+  const [pdfPageCount, setPdfPageCount] = useState<number | null>(null);
+  const [isLoadingPdfInfo, setIsLoadingPdfInfo] = useState(false);
+  const [pageStart, setPageStart] = useState(1);
+  const [pageEnd, setPageEnd] = useState(30);
 
   const ocr = useOcr();
 
   const onDrop = useCallback(
-    (acceptedFiles: File[]) => {
+    async (acceptedFiles: File[]) => {
       const selectedFile = acceptedFiles[0];
       if (!selectedFile) return;
 
@@ -59,11 +65,23 @@ export default function Home() {
       setViewMode("raw");
 
       if (isImageMime(mimeType)) {
+        setPdfPageCount(null);
         const reader = new FileReader();
         reader.onload = () => setPreview(reader.result as string);
         reader.readAsDataURL(selectedFile);
-      } else {
+      } else if (isPdfMime(mimeType)) {
         setPreview(null);
+        setIsLoadingPdfInfo(true);
+        try {
+          const count = await loadPdfPageCount(selectedFile);
+          setPdfPageCount(count);
+          setPageStart(1);
+          setPageEnd(Math.min(count, 30));
+        } catch {
+          setPdfPageCount(null);
+        } finally {
+          setIsLoadingPdfInfo(false);
+        }
       }
     },
     [ocr]
@@ -97,6 +115,14 @@ export default function Home() {
     void process(file);
   }, [file, process]);
 
+  const reprocessWithRange = () => {
+    ocr.setError(null);
+    const mimeType = file ? inferMimeType(file.name, file.type) : "";
+    if (isPdfMime(mimeType)) {
+      void process(file, { start: pageStart, end: pageEnd });
+    }
+  };
+
   const copyToClipboard = async () => {
     await navigator.clipboard.writeText(ocr.text);
     setCopied(true);
@@ -117,11 +143,20 @@ export default function Home() {
     ocr.reset();
     setFile(null);
     setPreview(null);
+    setPdfPageCount(null);
+    setIsLoadingPdfInfo(false);
+    setPageStart(1);
+    setPageEnd(30);
   };
 
   const retryProcessing = () => {
     ocr.setError(null);
-    void process(file);
+    const mimeType = file ? inferMimeType(file.name, file.type) : "";
+    const range =
+      isPdfMime(mimeType) && (pageStart !== 1 || pageEnd !== Math.min(pdfPageCount ?? 30, 30))
+        ? { start: pageStart, end: pageEnd }
+        : undefined;
+    void process(file, range);
   };
 
   return (
@@ -147,6 +182,16 @@ export default function Home() {
             onClear={clearAll}
             onBrowse={open}
             onCancel={ocr.cancel}
+            layoutVisualization={ocr.layoutVisualization}
+            pdfPageCount={pdfPageCount}
+            isLoadingPdfInfo={isLoadingPdfInfo}
+            pageStart={pageStart}
+            pageEnd={pageEnd}
+            onPageRangeChange={(start, end) => {
+              setPageStart(start);
+              setPageEnd(end);
+            }}
+            onReprocess={reprocessWithRange}
           />
 
           <OutputPanel
@@ -162,6 +207,7 @@ export default function Home() {
             hasFile={Boolean(file)}
             error={ocr.error}
             onRetry={retryProcessing}
+            layoutDetails={ocr.layoutDetails}
           />
         </div>
       </main>

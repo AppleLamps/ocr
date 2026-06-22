@@ -19,7 +19,7 @@ export function AppHeader() {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-cursor-bg border border-cursor-border text-xs font-mono text-cursor-terminal">
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-cursor-bg border border-cursor-border text-xs text-cursor-terminal">
             <Zap className="w-3 h-3" />
             GLM-OCR
           </div>
@@ -28,7 +28,7 @@ export function AppHeader() {
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="text-sm font-mono text-cursor-muted hover:text-cursor-text transition-colors"
+            className="text-sm text-cursor-muted hover:text-cursor-text transition-colors"
           >
             @lamps_apple
           </a>

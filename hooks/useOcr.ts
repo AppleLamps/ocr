@@ -14,7 +14,7 @@ import {
   prepareImageForOcr,
   splitPdfForOcr,
 } from "@/lib/ocr-client";
-import { submitFileToOcr } from "@/lib/ocr-fetch";
+import { submitFileToOcr, type LayoutDetail } from "@/lib/ocr-fetch";
 import { mapWithConcurrency } from "@/lib/concurrency";
 
 export type OcrProgress = { current: number; total: number };
@@ -34,9 +34,15 @@ export function useOcr() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<OcrProgress | null>(null);
+  const [layoutDetails, setLayoutDetails] = useState<LayoutDetail[] | null>(null);
+  const [layoutVisualization, setLayoutVisualization] = useState<string[] | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const process = useCallback(async (fileToProcess: File | null) => {
+  const process = useCallback(
+    async (
+      fileToProcess: File | null,
+      pageRange?: { start: number; end: number }
+    ) => {
     if (!fileToProcess) return;
 
     abortRef.current?.abort();
@@ -47,6 +53,8 @@ export function useOcr() {
     setStatusMessage("Preparing file...");
     setProgress(null);
     setError(null);
+    setLayoutDetails(null);
+    setLayoutVisualization(null);
 
     const mimeType = inferMimeType(fileToProcess.name, fileToProcess.type);
     if (!isSupportedOcrMime(mimeType)) {
@@ -67,11 +75,13 @@ export function useOcr() {
             ? "Processing image..."
             : "Image prepared for OCR..."
         );
-        const imageText = await submitFileToOcr(preparedImage, {
+        const result = await submitFileToOcr(preparedImage, {
           signal: abortController.signal,
         });
         if (abortController.signal.aborted) return;
-        setText(imageText);
+        setText(result.text);
+        setLayoutDetails(result.layoutDetails);
+        setLayoutVisualization(result.layoutVisualization);
         return;
       }
 
@@ -79,23 +89,35 @@ export function useOcr() {
         const pageCount = await loadPdfPageCount(fileToProcess);
         if (abortController.signal.aborted) return;
 
+        const effectivePageCount = pageRange
+          ? pageRange.end - pageRange.start + 1
+          : pageCount;
+
         const fitsSingleRequest =
           fileToProcess.size <= OCR_PDF_LIMIT_BYTES &&
-          pageCount <= OCR_PDF_PAGE_LIMIT;
+          effectivePageCount <= OCR_PDF_PAGE_LIMIT;
 
         if (fitsSingleRequest) {
-          setStatusMessage("Processing PDF...");
-          const pdfText = await submitFileToOcr(fileToProcess, {
+          const rangeDesc = pageRange
+            ? ` (pages ${pageRange.start}–${pageRange.end} of ${pageCount})`
+            : "";
+          setStatusMessage(`Processing PDF${rangeDesc}...`);
+          const result = await submitFileToOcr(fileToProcess, {
             signal: abortController.signal,
+            pageRange,
           });
           if (abortController.signal.aborted) return;
-          setText(pdfText);
+          setText(result.text);
+          setLayoutDetails(result.layoutDetails);
+          setLayoutVisualization(result.layoutVisualization);
           return;
         }
 
         setStatusMessage("Splitting PDF into chunks...");
-        const { chunks, pageCount: totalPages } =
-          await splitPdfForOcr(fileToProcess);
+        const { chunks, pageCount: totalPages } = await splitPdfForOcr(
+          fileToProcess,
+          pageRange
+        );
         if (abortController.signal.aborted) return;
 
         setStatusMessage(
@@ -105,11 +127,8 @@ export function useOcr() {
         );
         setProgress({ current: 0, total: chunks.length });
 
-        // Process chunks with bounded concurrency rather than one-at-a-time;
-        // results stay in page order. `completed` drives the progress bar since
-        // chunks no longer finish sequentially.
         let completed = 0;
-        const chunkTexts = await mapWithConcurrency(
+        const chunkResults = await mapWithConcurrency(
           chunks,
           OCR_CHUNK_CONCURRENCY,
           (chunk) => submitFileToOcr(chunk, { signal: abortController.signal }),
@@ -120,14 +139,18 @@ export function useOcr() {
         );
 
         if (abortController.signal.aborted) return;
+
         setText(
-          chunkTexts
+          chunkResults
+            .map((r) => r.text)
             .filter(Boolean)
             .map((part, index) =>
               chunks.length > 1 ? `<!-- Part ${index + 1} -->\n\n${part}` : part
             )
             .join("\n\n")
         );
+        setLayoutDetails(chunkResults[0]?.layoutDetails ?? null);
+        setLayoutVisualization(chunkResults[0]?.layoutVisualization ?? null);
         return;
       }
 
@@ -138,10 +161,10 @@ export function useOcr() {
     } finally {
       if (abortRef.current === abortController) {
         abortRef.current = null;
+        setIsProcessing(false);
+        setStatusMessage(null);
+        setProgress(null);
       }
-      setIsProcessing(false);
-      setStatusMessage(null);
-      setProgress(null);
     }
   }, []);
 
@@ -162,6 +185,8 @@ export function useOcr() {
     setStatusMessage(null);
     setError(null);
     setProgress(null);
+    setLayoutDetails(null);
+    setLayoutVisualization(null);
   }, []);
 
   return {
@@ -172,6 +197,8 @@ export function useOcr() {
     error,
     setError,
     progress,
+    layoutDetails,
+    layoutVisualization,
     process,
     cancel,
     reset,
