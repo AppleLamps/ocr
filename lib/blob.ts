@@ -14,13 +14,13 @@ export function getBlobToken(): string | undefined {
 /**
  * Blob store access mode. New Vercel Blob stores default to private; uploads
  * must use the same mode or the Blob API returns 400 (often surfaced as CORS).
- * `NEXT_PUBLIC_BLOB_ACCESS` is injected from the server env in `next.config.js`.
+ * Browser uploads fetch this from `/api/blob-config` at runtime.
  */
 export function getBlobAccess(): BlobAccess {
   const value =
-    process.env.NEXT_PUBLIC_BLOB_ACCESS ||
     process.env.BLOB_ACCESS ||
-    process.env.zaiblob_ACCESS
+    process.env.zaiblob_ACCESS ||
+    process.env.NEXT_PUBLIC_BLOB_ACCESS
 
   return value === 'public' ? 'public' : 'private'
 }

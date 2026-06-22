@@ -85,7 +85,8 @@ npm run test:watch
 2. Import the project to Vercel
 3. Create a Blob store for the project (its token/store id are exposed under the `zaiblob_` prefix)
 4. Add the `ZAI_API_KEY` (and confirm the `zaiblob_READ_WRITE_TOKEN` / `zaiblob_STORE_ID`) environment variables in Vercel settings
-5. Deploy
+5. Set `BLOB_ACCESS=private` (or `public` only if your Blob store was created with public access). A mismatch causes upload failures that look like CORS errors in the browser.
+6. Deploy
 
 ## Tech Stack
 

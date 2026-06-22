@@ -23,7 +23,7 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "img-src 'self' data: blob:",
       "font-src 'self' https://fonts.gstatic.com",
-      "connect-src 'self' https://vercel.com https://*.public.blob.vercel-storage.com",
+      "connect-src 'self' https://vercel.com https://*.public.blob.vercel-storage.com https://*.private.blob.vercel-storage.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
@@ -31,14 +31,8 @@ const securityHeaders = [
   },
 ]
 
-const blobAccess = process.env.BLOB_ACCESS || process.env.zaiblob_ACCESS || 'private'
-
 const nextConfig = {
   reactStrictMode: true,
-  env: {
-    // Keep client uploads aligned with the Blob store (public vs private).
-    NEXT_PUBLIC_BLOB_ACCESS: blobAccess,
-  },
   async headers() {
     return [
       {

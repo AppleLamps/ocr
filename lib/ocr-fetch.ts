@@ -1,5 +1,5 @@
 import { upload } from '@vercel/blob/client'
-import { getBlobAccess } from './blob'
+import type { BlobAccess } from './blob'
 import { isRetryableHttpStatus } from './ocr'
 import { sleep } from './ocr-client'
 
@@ -35,6 +35,22 @@ async function parseOcrResponse(response: Response): Promise<OcrApiResponse> {
   }
 }
 
+let cachedBlobAccess: BlobAccess | null = null
+
+/** Read access mode from the server at runtime so Vercel env changes do not require a rebuild. */
+async function getClientBlobAccess(): Promise<BlobAccess> {
+  if (cachedBlobAccess) return cachedBlobAccess
+
+  const response = await fetch('/api/blob-config')
+  if (!response.ok) {
+    throw new Error('Blob storage is not configured')
+  }
+
+  const data = (await response.json()) as { access?: unknown }
+  cachedBlobAccess = data.access === 'public' ? 'public' : 'private'
+  return cachedBlobAccess
+}
+
 /**
  * Upload the file straight to Blob storage from the browser. This bypasses the
  * serverless function payload limit (no more base64 round-trip through our API)
@@ -42,7 +58,7 @@ async function parseOcrResponse(response: Response): Promise<OcrApiResponse> {
  */
 async function uploadToBlob(file: File, signal?: AbortSignal): Promise<string> {
   const result = await upload(`ocr-uploads/${file.name}`, file, {
-    access: getBlobAccess(),
+    access: await getClientBlobAccess(),
     handleUploadUrl: '/api/blob-upload',
     contentType: file.type || undefined,
     abortSignal: signal,
