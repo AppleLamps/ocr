@@ -163,6 +163,45 @@ export async function splitPdfForOcr(
   return { chunks, pageCount: rangeEndExclusive - rangeStart }
 }
 
+export type NormalizedCropRegion = {
+  id: string
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+}
+
+/** Crop a normalized region from an image for a targeted gap-recovery OCR pass. */
+export async function cropImageRegion(
+  file: File,
+  region: NormalizedCropRegion
+): Promise<File> {
+  const image = await loadImageElement(file)
+  const x1 = Math.max(0, Math.round(region.x1 * image.naturalWidth))
+  const y1 = Math.max(0, Math.round(region.y1 * image.naturalHeight))
+  const x2 = Math.min(image.naturalWidth, Math.round(region.x2 * image.naturalWidth))
+  const y2 = Math.min(image.naturalHeight, Math.round(region.y2 * image.naturalHeight))
+  const width = Math.max(1, x2 - x1)
+  const height = Math.max(1, y2 - y1)
+
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+
+  const ctx = canvas.getContext('2d')
+  if (!ctx) {
+    throw new Error('Could not initialize canvas for image crop')
+  }
+
+  ctx.drawImage(image, x1, y1, width, height, 0, 0, width, height)
+
+  const blob = await canvasToBlob(canvas, 0.92)
+  return new File([blob], replaceExtension(file.name, `gap-${region.id}.jpg`), {
+    type: 'image/jpeg',
+    lastModified: Date.now(),
+  })
+}
+
 export async function loadPdfPageCount(file: File): Promise<number> {
   try {
     const bytes = await file.arrayBuffer()

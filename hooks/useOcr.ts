@@ -10,10 +10,18 @@ import {
   OCR_PDF_PAGE_LIMIT,
 } from "@/lib/ocr";
 import {
+  cropImageRegion,
   loadPdfPageCount,
   prepareImageForOcr,
   splitPdfForOcr,
 } from "@/lib/ocr-client";
+import {
+  findUncoveredMarginZones,
+  flattenLayoutDetails,
+  hasMainBodyContent,
+  mergeGapRecoveryText,
+  stripOcrImagePlaceholders,
+} from "@/lib/gap-detection";
 import { submitFileToOcr, type LayoutDetail } from "@/lib/ocr-fetch";
 import { mapWithConcurrency } from "@/lib/concurrency";
 
@@ -22,6 +30,45 @@ export type OcrProgress = { current: number; total: number };
 // How many chunk requests run at once. Kept modest so a multi-chunk PDF does
 // not burst past the API/rate-limit budget while still cutting wall-clock time.
 const OCR_CHUNK_CONCURRENCY = 4;
+
+async function recoverImageMarginGaps(
+  preparedImage: File,
+  primaryText: string,
+  layoutDetails: LayoutDetail[] | null,
+  options: { signal?: AbortSignal; onStatus?: (message: string) => void }
+): Promise<string> {
+  const flatDetails = flattenLayoutDetails(layoutDetails);
+  if (!flatDetails.length || !hasMainBodyContent(flatDetails)) {
+    return primaryText;
+  }
+
+  const gaps = findUncoveredMarginZones(flatDetails);
+  if (!gaps.length) {
+    return primaryText;
+  }
+
+  options.onStatus?.("Recovering missed text...");
+
+  const recoveredTexts: string[] = [];
+  for (const gap of gaps) {
+    if (options.signal?.aborted) {
+      throw new Error("OCR cancelled");
+    }
+
+    const crop = await cropImageRegion(preparedImage, gap);
+    const gapResult = await submitFileToOcr(crop, { signal: options.signal });
+    const cleaned = stripOcrImagePlaceholders(gapResult.text);
+    if (cleaned) {
+      recoveredTexts.push(cleaned);
+    }
+  }
+
+  if (!recoveredTexts.length) {
+    return primaryText;
+  }
+
+  return mergeGapRecoveryText(primaryText, recoveredTexts);
+}
 
 /**
  * Owns the OCR pipeline: file preparation, single vs. chunked requests,
@@ -79,7 +126,19 @@ export function useOcr() {
           signal: abortController.signal,
         });
         if (abortController.signal.aborted) return;
-        setText(result.text);
+
+        const textWithGaps = await recoverImageMarginGaps(
+          preparedImage,
+          result.text,
+          result.layoutDetails,
+          {
+            signal: abortController.signal,
+            onStatus: setStatusMessage,
+          }
+        );
+        if (abortController.signal.aborted) return;
+
+        setText(textWithGaps);
         setLayoutDetails(result.layoutDetails);
         setLayoutVisualization(result.layoutVisualization);
         return;
