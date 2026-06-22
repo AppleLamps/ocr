@@ -1,5 +1,6 @@
 import { upload } from '@vercel/blob/client'
 import type { BlobAccess } from './blob'
+import { stripOcrImagePlaceholders } from './gap-detection'
 import { isRetryableHttpStatus } from './ocr'
 import { sleep } from './ocr-client'
 
@@ -165,7 +166,7 @@ export async function submitFileToOcr(
       throw lastError
     }
 
-    const text = String(data.text || '').trim()
+    const text = stripOcrImagePlaceholders(String(data.text || ''))
     if (!text) {
       if (data.empty) {
         throw new Error(

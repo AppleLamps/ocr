@@ -107,10 +107,13 @@ export function findUncoveredMarginZones(
 }
 
 export function stripOcrImagePlaceholders(text: string): string {
-  return text.replace(/!\[\]\(page=\d+,bbox=\[[^\]]+\]\)\s*/g, '').trim()
+  return text
+    .replace(/!\[\]\(page=\d+,bbox=\[[^\]]+\]\)\s*/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
-/** Prepend recovered margin text after any leading image placeholders. */
+/** Prepend recovered margin text before the main body. */
 export function mergeGapRecoveryText(
   primary: string,
   recoveredTexts: string[]
@@ -118,13 +121,5 @@ export function mergeGapRecoveryText(
   const parts = recoveredTexts.map(stripOcrImagePlaceholders).filter(Boolean)
   if (!parts.length) return primary
 
-  const recoveredBlock = parts.join('\n\n')
-  const imagePrefixMatch = primary.match(/^(\s*!\[\]\(page=\d+,bbox=\[[^\]]+\]\)\s*)+/)
-  if (imagePrefixMatch) {
-    const prefix = imagePrefixMatch[0].replace(/\s+$/, '')
-    const rest = primary.slice(imagePrefixMatch[0].length).trimStart()
-    return `${prefix}\n${recoveredBlock}\n\n${rest}`
-  }
-
-  return `${recoveredBlock}\n\n${primary}`
+  return `${parts.join('\n\n')}\n\n${primary}`
 }

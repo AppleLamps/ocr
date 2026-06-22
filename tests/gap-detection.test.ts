@@ -112,14 +112,6 @@ describe('mergeGapRecoveryText', () => {
       'June 18, 2026\n\nDear Congressman:'
     )
   })
-
-  it('inserts recovered text after leading image placeholders', () => {
-    const primary =
-      '![](page=0,bbox=[62, 79, 275, 203])\n\nDear Congressman:'
-    expect(mergeGapRecoveryText(primary, ['June 18, 2026'])).toBe(
-      '![](page=0,bbox=[62, 79, 275, 203])\nJune 18, 2026\n\nDear Congressman:'
-    )
-  })
 })
 
 describe('stripOcrImagePlaceholders', () => {
@@ -127,6 +119,15 @@ describe('stripOcrImagePlaceholders', () => {
     expect(
       stripOcrImagePlaceholders('![](page=0,bbox=[1,2,3,4])\n\nHello')
     ).toBe('Hello')
+  })
+
+  it('removes multiple leading letterhead placeholders', () => {
+    const input = `![](page=0,bbox=[62, 79, 275, 203])
+
+![](page=0,bbox=[60, 203, 273, 513])
+
+Dear Congressman:`
+    expect(stripOcrImagePlaceholders(input)).toBe('Dear Congressman:')
   })
 })
 

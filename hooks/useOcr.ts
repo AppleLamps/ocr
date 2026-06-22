@@ -20,7 +20,6 @@ import {
   flattenLayoutDetails,
   hasMainBodyContent,
   mergeGapRecoveryText,
-  stripOcrImagePlaceholders,
 } from "@/lib/gap-detection";
 import { submitFileToOcr, type LayoutDetail } from "@/lib/ocr-fetch";
 import { mapWithConcurrency } from "@/lib/concurrency";
@@ -57,9 +56,8 @@ async function recoverImageMarginGaps(
 
     const crop = await cropImageRegion(preparedImage, gap);
     const gapResult = await submitFileToOcr(crop, { signal: options.signal });
-    const cleaned = stripOcrImagePlaceholders(gapResult.text);
-    if (cleaned) {
-      recoveredTexts.push(cleaned);
+    if (gapResult.text) {
+      recoveredTexts.push(gapResult.text);
     }
   }
 
